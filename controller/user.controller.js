@@ -1,6 +1,8 @@
 import User from "../modal/user.modal.js";
 import crypto from "crypto";
 import sendMail from "../utils/sendmail.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 const registerUser = async function (req, res) {
   const { name, email, password } = req.body;
@@ -95,4 +97,52 @@ const verifyUser = async function (req, res) {
   return res.send("User Verified Successfully");
 };
 
-export { registerUser, verifyUser };
+const loginUser = async function (req, res) {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "All fields are required" });
+  }
+  try {
+    const user = await User.findOne({ email: email });
+    if (!user) {
+      return res.status(404).json({ error: "User Not Found" });
+    }
+
+    if (!user.isVerified) {
+      return res
+        .status(403)
+        .json({ error: "Please verify your email before login" });
+    }
+
+    const isPasswordMatched = await bcrypt.compare(password, user.password);
+
+    console.log(isPasswordMatched);
+    if (!isPasswordMatched) {
+      return res.status(401).json({ error: "Invalid Email Or Password" });
+    }
+
+    const sessionToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "24h",
+    });
+
+    console.log(sessionToken);
+
+    const cookieOption = {
+      httpOnly: true,
+      secure: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24h
+    };
+
+    res.cookie("token", sessionToken, cookieOption);
+
+    res.status(200).json({
+      success: true,
+      message: "Login Successful",
+      user: { id: user._id, name: user.name },
+    });
+  } catch (error) {
+    console.log(error, `Something went wrong while login`);
+  }
+};
+
+export { registerUser, verifyUser, loginUser };
